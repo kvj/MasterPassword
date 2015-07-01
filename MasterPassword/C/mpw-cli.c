@@ -25,7 +25,7 @@
 
 static void usage() {
 
-    fprintf( stderr, "Usage: mpw [-u name] [-t type] [-c counter] [-V version] [-v variant] [-C context] [-h] site\n\n" );
+    fprintf( stderr, "Usage: mpw [-u name] [-t type] [-c counter] [-V version] [-v variant] [-C context] [-s] [-h] site\n\n" );
     fprintf( stderr, "    -u name      Specify the full name of the user.\n"
             "                 Defaults to %s in env.\n\n", MP_env_fullname );
     fprintf( stderr, "    -t type      Specify the password's template.\n"
@@ -53,6 +53,8 @@ static void usage() {
             "                  -v l, login    | Doesn't currently use a context.\n"
             "                  -v a, answer   | Empty for a universal site answer or\n"
             "                                 | the most significant word(s) of the question.\n\n" );
+    fprintf( stderr, "    -s           Operate is silent mode.\n"
+            "                 Master password will be read from standard output and password will be printed back\n\n");
     fprintf( stderr, "    ENVIRONMENT\n\n"
             "        MP_FULLNAME    | The full name of the user.\n"
             "        MP_SITETYPE    | The default password template.\n"
@@ -91,6 +93,19 @@ static char *getlinep(const char *prompt) {
     return buf;
 }
 
+static char *getpass_stdin() {
+
+    char *buf = NULL;
+    size_t bufSize = 0;
+    ssize_t lineSize;
+    if ((lineSize = getline( &buf, &bufSize, stdin )) < 0) {
+        free( buf );
+        return NULL;
+    }
+    buf[lineSize - 1] = 0;
+    return buf;
+}
+
 int main(int argc, char *const argv[]) {
 
     // Read the environment.
@@ -106,12 +121,13 @@ int main(int argc, char *const argv[]) {
     const char *siteCounterString = getenv( MP_env_sitecounter );
     MPAlgorithmVersion algorithmVersion = MPAlgorithmVersionCurrent;
     const char *algorithmVersionString = getenv( MP_env_algorithm );
+	int silent = 0;
     if (algorithmVersionString && strlen( algorithmVersionString ))
         if (sscanf( algorithmVersionString, "%u", &algorithmVersion ) != 1)
             ftl( "Invalid %s: %s\n", MP_env_algorithm, algorithmVersionString );
 
     // Read the options.
-    for (int opt; (opt = getopt( argc, argv, "u:P:t:c:v:V:C:h" )) != -1;)
+    for (int opt; (opt = getopt( argc, argv, "u:P:t:c:v:V:C:h:s" )) != -1;)
         switch (opt) {
             case 'u':
                 fullName = optarg;
@@ -137,6 +153,9 @@ int main(int argc, char *const argv[]) {
             case 'C':
                 siteContextString = optarg;
                 break;
+            case 's':
+                silent = 1;
+                break;
             case 'h':
                 usage();
                 break;
@@ -161,8 +180,12 @@ int main(int argc, char *const argv[]) {
         siteName = argv[optind];
 
     // Convert and validate input.
+    if (!fullName && silent)
+        ftl( "Missing full name.\n" ); // No data can be read from standard output
     if (!fullName && !(fullName = getlinep( "Your full name:" )))
         ftl( "Missing full name.\n" );
+    if (!siteName && silent)
+        ftl( "Missing site name.\n" );
     if (!siteName && !(siteName = getlinep( "Site name:" )))
         ftl( "Missing site name.\n" );
     if (siteCounterString)
@@ -198,11 +221,18 @@ int main(int argc, char *const argv[]) {
         }
         mpw_free( line, linecap );
     }
-    while (!masterPassword || !strlen(masterPassword))
-        masterPassword = getpass( "Your master password: " );
+	if (silent) {
+		// Read masterPassword from standard input
+		masterPassword = getpass_stdin();
+		if (!masterPassword || !strlen(masterPassword))
+			ftl( "Invalid site counter: %d\n", siteCounter );
+	} else {
+		while (!masterPassword || !strlen(masterPassword))
+			masterPassword = getpass( "Your master password: " );
 
-    // Summarize operation.
-    fprintf( stderr, "%s's password for %s:\n[ %s ]: ", fullName, siteName, mpw_identicon( fullName, masterPassword ) );
+		// Summarize operation.
+		fprintf( stderr, "%s's password for %s:\n[ %s ]: ", fullName, siteName, mpw_identicon( fullName, masterPassword ) );
+	}
 
     // Output the password.
     const uint8_t *masterKey = mpw_masterKeyForUser(

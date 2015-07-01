@@ -33,13 +33,11 @@ else
     # Modify here or override using targets='mpw mpw-bench' ./build
     targets=(
         mpw                         # C CLI version of Master Password.
-        mpw-bench                   # C CLI Master Password benchmark utility.
-        mpw-tests                   # C Master Password algorithm tester.
     )
 fi
 
 # Optional features.
-mpw_color=1 # Colorized Identicon, requires libncurses-dev
+mpw_color=0 # Colorized Identicon, requires libncurses-dev
 
 
 ### DEPENDENCIES
@@ -101,7 +99,7 @@ fetchSource() (
         [[ -e .git ]] || {
             echo
             echo "Fetching: ${PWD##*/}, using git..."
-            git clone "$svn" .
+            git clone "$git" .
             printf '%s' "$(git describe --always)" > "${PWD##*/}-version"
         }
 
